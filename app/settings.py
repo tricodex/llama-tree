@@ -12,7 +12,7 @@ def init_settings():
     )
     Settings.llm = Ollama(
         base_url=base_url,
-        model=os.getenv("MODEL", "llama3"),
+        model=os.getenv("MODEL", "llama2"),
         request_timeout=float(os.getenv("OLLAMA_REQUEST_TIMEOUT", 120.0))
     )
 
