@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Body -->
+  <ellipse cx="32" cy="40" rx="20" ry="16" fill="#87CEFA"/>
+  <!-- Neck and Head -->
+  <path d="M32 24 Q30 12 32 8 Q34 12 32 24" fill="#87CEFA"/>
+  <!-- Legs (in walking position, left leg up) -->
+  <rect x="20" y="50" width="6" height="10" rx="3" fill="#4682B4"/>
+  <rect x="38" y="50" width="6" height="12" rx="3" fill="#4682B4"/>
+  <!-- Face -->
+  <circle cx="29" cy="10" r="2" fill="#4A4A4A"/>
+  <circle cx="35" cy="10" r="2" fill="#4A4A4A"/>
+  <path d="M30 15 Q32 17 34 15" fill="none" stroke="#4A4A4A" stroke-width="1"/>
+  <!-- Ears -->
+  <path d="M28 6 Q26 4 28 2" fill="#4682B4"/>
+  <path d="M36 6 Q38 4 36 2" fill="#4682B4"/>
+  <!-- Tail -->
+  <path d="M50 40 Q54 42 52 46" fill="none" stroke="#4682B4" stroke-width="2"/>
+  <!-- Fur Details -->
+  <path d="M18 36 Q32 32 46 36" fill="none" stroke="#ADD8E6" stroke-width="1"/>
+  <path d="M18 44 Q32 40 46 44" fill="none" stroke="#ADD8E6" stroke-width="1"/>
+  <!-- Cute Blush -->
+  <circle cx="26" cy="14" r="2" fill="#FF69B4" opacity="0.5"/>
+  <circle cx="38" cy="14" r="2" fill="#FF69B4" opacity="0.5"/>
+</svg>
