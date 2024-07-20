@@ -1,0 +1,739 @@
+rootfolder: app
+
+llmhub.py
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.core.settings import Settings
+from typing import Dict
+import os
+
+DEFAULT_MODEL = "gpt-3.5-turbo"
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-large"
+
+class TSIEmbedding(OpenAIEmbedding):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._query_engine = self._text_engine = self.model_name
+
+def llm_config_from_env() -> Dict:
+    from llama_index.core.constants import DEFAULT_TEMPERATURE
+
+    model = os.getenv("MODEL", DEFAULT_MODEL)
+    temperature = os.getenv("LLM_TEMPERATURE", DEFAULT_TEMPERATURE)
+    max_tokens = os.getenv("LLM_MAX_TOKENS")
+    api_key = os.getenv("T_SYSTEMS_LLMHUB_API_KEY")
+    api_base = os.getenv("T_SYSTEMS_LLMHUB_BASE_URL")
+
+    config = {
+        "model": model,
+        "api_key": api_key,
+        "api_base": api_base,
+        "temperature": float(temperature),
+        "max_tokens": int(max_tokens) if max_tokens is not None else None,
+    }
+    return config
+
+
+def embedding_config_from_env() -> Dict:
+    from llama_index.core.constants import DEFAULT_EMBEDDING_DIM
+    
+    model = os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    dimension = os.getenv("EMBEDDING_DIM", DEFAULT_EMBEDDING_DIM)
+    api_key = os.getenv("T_SYSTEMS_LLMHUB_API_KEY")
+    api_base = os.getenv("T_SYSTEMS_LLMHUB_BASE_URL")
+
+    config = {
+        "model_name": model,
+        "dimension": int(dimension) if dimension is not None else None,
+        "api_key": api_key,
+        "api_base": api_base,
+    }
+    return config
+
+def init_llmhub():
+    from llama_index.llms.openai_like import OpenAILike
+
+    llm_configs = llm_config_from_env()
+    embedding_configs = embedding_config_from_env()
+
+    Settings.embed_model = TSIEmbedding(**embedding_configs)
+    Settings.llm = OpenAILike(
+        **llm_configs,
+        is_chat_model=True,
+        is_function_calling_model=False,
+        context_window=4096,
+    )
+
+utils.py
+import os
+
+
+def load_from_env(var: str, throw_error: bool = True) -> str:
+    res = os.getenv(var)
+    if res is None and throw_error:
+        raise ValueError(f"Missing environment variable: {var}")
+    return res
+
+settings.py
+import os
+from typing import Dict
+
+from llama_index.core.settings import Settings
+
+
+def init_settings():
+    model_provider = os.getenv("MODEL_PROVIDER")
+    match model_provider:
+        case "openai":
+            init_openai()
+        case "groq":
+            init_groq()
+        case "ollama":
+            init_ollama()
+        case "anthropic":
+            init_anthropic()
+        case "gemini":
+            init_gemini()
+        case "mistral":
+            init_mistral()
+        case "azure-openai":
+            init_azure_openai()
+        case "t-systems":
+            from .llmhub import init_llmhub
+
+            init_llmhub()
+        case _:
+            raise ValueError(f"Invalid model provider: {model_provider}")
+
+    Settings.chunk_size = int(os.getenv("CHUNK_SIZE", "1024"))
+    Settings.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "20"))
+
+
+def init_ollama():
+    from llama_index.embeddings.ollama import OllamaEmbedding
+    from llama_index.llms.ollama.base import DEFAULT_REQUEST_TIMEOUT, Ollama
+
+    base_url = os.getenv("OLLAMA_BASE_URL") or "http://127.0.0.1:11434"
+    request_timeout = float(
+        os.getenv("OLLAMA_REQUEST_TIMEOUT", DEFAULT_REQUEST_TIMEOUT)
+    )
+    Settings.embed_model = OllamaEmbedding(
+        base_url=base_url,
+        model_name=os.getenv("EMBEDDING_MODEL"),
+    )
+    Settings.llm = Ollama(
+        base_url=base_url, model=os.getenv("MODEL"), request_timeout=request_timeout
+    )
+
+
+def init_openai():
+    from llama_index.core.constants import DEFAULT_TEMPERATURE
+    from llama_index.embeddings.openai import OpenAIEmbedding
+    from llama_index.llms.openai import OpenAI
+
+    max_tokens = os.getenv("LLM_MAX_TOKENS")
+    config = {
+        "model": os.getenv("MODEL"),
+        "temperature": float(os.getenv("LLM_TEMPERATURE", DEFAULT_TEMPERATURE)),
+        "max_tokens": int(max_tokens) if max_tokens is not None else None,
+    }
+    Settings.llm = OpenAI(**config)
+
+    dimensions = os.getenv("EMBEDDING_DIM")
+    config = {
+        "model": os.getenv("EMBEDDING_MODEL"),
+        "dimensions": int(dimensions) if dimensions is not None else None,
+    }
+    Settings.embed_model = OpenAIEmbedding(**config)
+
+
+def init_azure_openai():
+    from llama_index.core.constants import DEFAULT_TEMPERATURE
+    from llama_index.embeddings.azure_openai import AzureOpenAIEmbedding
+    from llama_index.llms.azure_openai import AzureOpenAI
+
+    llm_deployment = os.getenv("AZURE_OPENAI_LLM_DEPLOYMENT")
+    embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+    max_tokens = os.getenv("LLM_MAX_TOKENS")
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    llm_config = {
+        "api_key": api_key,
+        "deployment_name": llm_deployment,
+        "model": os.getenv("MODEL"),
+        "temperature": float(os.getenv("LLM_TEMPERATURE", DEFAULT_TEMPERATURE)),
+        "max_tokens": int(max_tokens) if max_tokens is not None else None,
+    }
+    Settings.llm = AzureOpenAI(**llm_config)
+
+    dimensions = os.getenv("EMBEDDING_DIM")
+    embedding_config = {
+        "api_key": api_key,
+        "deployment_name": embedding_deployment,
+        "model": os.getenv("EMBEDDING_MODEL"),
+        "dimensions": int(dimensions) if dimensions is not None else None,
+    }
+    Settings.embed_model = AzureOpenAIEmbedding(**embedding_config)
+
+
+def init_fastembed():
+    """
+    Use Qdrant Fastembed as the local embedding provider.
+    """
+    from llama_index.embeddings.fastembed import FastEmbedEmbedding
+
+    embed_model_map: Dict[str, str] = {
+        # Small and multilingual
+        "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
+        # Large and multilingual
+        "paraphrase-multilingual-mpnet-base-v2": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2",   # noqa: E501
+    }
+
+    # This will download the model automatically if it is not already downloaded
+    Settings.embed_model = FastEmbedEmbedding(
+        model_name=embed_model_map[os.getenv("EMBEDDING_MODEL")]
+    )
+
+def init_groq():
+    from llama_index.llms.groq import Groq
+
+    model_map: Dict[str, str] = {
+        "llama3-8b": "llama3-8b-8192",
+        "llama3-70b": "llama3-70b-8192",
+        "mixtral-8x7b": "mixtral-8x7b-32768",
+    }
+
+
+    Settings.llm = Groq(model=model_map[os.getenv("MODEL")])
+    # Groq does not provide embeddings, so we use FastEmbed instead
+    init_fastembed()
+
+
+def init_anthropic():
+    from llama_index.llms.anthropic import Anthropic
+
+    model_map: Dict[str, str] = {
+        "claude-3-opus": "claude-3-opus-20240229",
+        "claude-3-sonnet": "claude-3-sonnet-20240229",
+        "claude-3-haiku": "claude-3-haiku-20240307",
+        "claude-2.1": "claude-2.1",
+        "claude-instant-1.2": "claude-instant-1.2",
+    }
+
+    Settings.llm = Anthropic(model=model_map[os.getenv("MODEL")])
+    # Anthropic does not provide embeddings, so we use FastEmbed instead
+    init_fastembed()
+
+
+def init_gemini():
+    from llama_index.embeddings.gemini import GeminiEmbedding
+    from llama_index.llms.gemini import Gemini
+
+    model_name = f"models/{os.getenv('MODEL')}"
+    embed_model_name = f"models/{os.getenv('EMBEDDING_MODEL')}"
+
+    Settings.llm = Gemini(model=model_name)
+    Settings.embed_model = GeminiEmbedding(model_name=embed_model_name)
+
+
+def init_mistral():
+    from llama_index.embeddings.mistralai import MistralAIEmbedding
+    from llama_index.llms.mistralai import MistralAI
+
+    Settings.llm = MistralAI(model=os.getenv("MODEL"))
+    Settings.embed_model = MistralAIEmbedding(model_name=os.getenv("EMBEDDING_MODEL"))
+
+
+app_extract.txt
+
+
+core/control_plane.py
+from llama_index.llms.openai import OpenAI
+from llama_agents import AgentOrchestrator, ControlPlaneServer
+from app.core.message_queue import message_queue
+from app.utils import load_from_env
+
+
+control_plane_host = (
+    load_from_env("CONTROL_PLANE_HOST", throw_error=False) or "127.0.0.1"
+)
+control_plane_port = load_from_env("CONTROL_PLANE_PORT", throw_error=False) or "8001"
+
+
+# setup control plane
+control_plane = ControlPlaneServer(
+    message_queue=message_queue,
+    orchestrator=AgentOrchestrator(llm=OpenAI()),
+    host=control_plane_host,
+    port=int(control_plane_port) if control_plane_port else None,
+)
+
+
+core/message_queue.py
+from llama_agents import SimpleMessageQueue
+from app.utils import load_from_env
+
+message_queue_host = (
+    load_from_env("MESSAGE_QUEUE_HOST", throw_error=False) or "127.0.0.1"
+)
+message_queue_port = load_from_env("MESSAGE_QUEUE_PORT", throw_error=False) or "8000"
+
+message_queue = SimpleMessageQueue(
+    host=message_queue_host,
+    port=int(message_queue_port) if message_queue_port else None,
+)
+
+
+core/task_result.py
+import json
+from logging import getLogger
+from pathlib import Path
+from fastapi import FastAPI
+from typing import Dict, Optional
+from llama_agents import CallableMessageConsumer, QueueMessage
+from llama_agents.message_queues.base import BaseMessageQueue
+from llama_agents.message_consumers.base import BaseMessageQueueConsumer
+from llama_agents.message_consumers.remote import RemoteMessageConsumer
+from app.utils import load_from_env
+from app.core.message_queue import message_queue
+
+
+logger = getLogger(__name__)
+
+
+class TaskResultService:
+    def __init__(
+        self,
+        message_queue: BaseMessageQueue,
+        name: str = "human",
+        host: str = "127.0.0.1",
+        port: Optional[int] = 8002,
+    ) -> None:
+        self.name = name
+        self.host = host
+        self.port = port
+
+        self._message_queue = message_queue
+
+        # app
+        self._app = FastAPI()
+        self._app.add_api_route(
+            "/", self.home, methods=["GET"], tags=["Human Consumer"]
+        )
+        self._app.add_api_route(
+            "/process_message",
+            self.process_message,
+            methods=["POST"],
+            tags=["Human Consumer"],
+        )
+
+    @property
+    def message_queue(self) -> BaseMessageQueue:
+        return self._message_queue
+
+    def as_consumer(self, remote: bool = False) -> BaseMessageQueueConsumer:
+        if remote:
+            return RemoteMessageConsumer(
+                url=(
+                    f"http://{self.host}:{self.port}/process_message"
+                    if self.port
+                    else f"http://{self.host}/process_message"
+                ),
+                message_type=self.name,
+            )
+
+        return CallableMessageConsumer(
+            message_type=self.name,
+            handler=self.process_message,
+        )
+
+    async def process_message(self, message: QueueMessage) -> None:
+        Path("task_results").mkdir(exist_ok=True)
+        with open("task_results/task_results.json", "+a") as f:
+            json.dump(message.model_dump(), f)
+            f.write("\n")
+
+    async def home(self) -> Dict[str, str]:
+        return {"message": "hello, human."}
+
+    async def register_to_message_queue(self) -> None:
+        """Register to the message queue."""
+        await self.message_queue.register_consumer(self.as_consumer(remote=True))
+
+
+human_consumer_host = (
+    load_from_env("HUMAN_CONSUMER_HOST", throw_error=False) or "127.0.0.1"
+)
+human_consumer_port = load_from_env("HUMAN_CONSUMER_PORT", throw_error=False) or "8002"
+
+
+human_consumer_server = TaskResultService(
+    message_queue=message_queue,
+    host=human_consumer_host,
+    port=int(human_consumer_port) if human_consumer_port else None,
+    name="human",
+)
+
+
+agents/dummy/agent.py
+from llama_agents import AgentService, SimpleMessageQueue
+from llama_index.core.agent import FunctionCallingAgentWorker
+from llama_index.core.tools import FunctionTool
+from llama_index.core.settings import Settings
+from app.utils import load_from_env
+
+
+DEFAULT_DUMMY_AGENT_DESCRIPTION = "I'm a dummy agent which does nothing."
+
+
+def dummy_function():
+    """
+    This function does nothing.
+    """
+    return ""
+
+
+def init_dummy_agent(message_queue: SimpleMessageQueue) -> AgentService:
+    agent = FunctionCallingAgentWorker(
+        tools=[FunctionTool.from_defaults(fn=dummy_function)],
+        llm=Settings.llm,
+        prefix_messages=[],
+    ).as_agent()
+
+    return AgentService(
+        service_name="dummy_agent",
+        agent=agent,
+        message_queue=message_queue.client,
+        description=load_from_env("AGENT_DUMMY_DESCRIPTION", throw_error=False)
+        or DEFAULT_DUMMY_AGENT_DESCRIPTION,
+        host=load_from_env("AGENT_DUMMY_HOST", throw_error=False) or "127.0.0.1",
+        port=int(load_from_env("AGENT_DUMMY_PORT")),
+    )
+
+
+agents/query_engine/agent.py
+import os
+from llama_agents import AgentService, SimpleMessageQueue
+from llama_index.core.agent import FunctionCallingAgentWorker
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
+from llama_index.core.settings import Settings
+from app.engine.index import get_index
+from app.utils import load_from_env
+
+
+DEFAULT_QUERY_ENGINE_AGENT_DESCRIPTION = (
+    "Used to answer the questions using the provided context data."
+)
+
+
+def get_query_engine_tool() -> QueryEngineTool:
+    """
+    Provide an agent worker that can be used to query the index.
+    """
+    index = get_index()
+    if index is None:
+        raise ValueError("Index not found. Please create an index first.")
+    query_engine = index.as_query_engine(similarity_top_k=int(os.getenv("TOP_K", 3)))
+    return QueryEngineTool(
+        query_engine=query_engine,
+        metadata=ToolMetadata(
+            name="context_data",
+            description="""
+                Provide the provided context information. 
+                Use a detailed plain text question as input to the tool.
+            """,
+        ),
+    )
+
+
+def init_query_engine_agent(
+    message_queue: SimpleMessageQueue,
+) -> AgentService:
+    """
+    Initialize the agent service.
+    """
+    agent = FunctionCallingAgentWorker(
+        tools=[get_query_engine_tool()], llm=Settings.llm, prefix_messages=[]
+    ).as_agent()
+    return AgentService(
+        service_name="context_query_agent",
+        agent=agent,
+        message_queue=message_queue.client,
+        description=load_from_env("AGENT_QUERY_ENGINE_DESCRIPTION", throw_error=False)
+        or DEFAULT_QUERY_ENGINE_AGENT_DESCRIPTION,
+        host=load_from_env("AGENT_QUERY_ENGINE_HOST", throw_error=False) or "127.0.0.1",
+        port=int(load_from_env("AGENT_QUERY_ENGINE_PORT")),
+    )
+
+
+engine/index.py
+import logging
+import os
+from llama_index.indices.managed.llama_cloud import LlamaCloudIndex
+
+
+logger = logging.getLogger("uvicorn")
+
+
+def get_index():
+    name = os.getenv("LLAMA_CLOUD_INDEX_NAME")
+    project_name = os.getenv("LLAMA_CLOUD_PROJECT_NAME")
+    api_key = os.getenv("LLAMA_CLOUD_API_KEY")
+    base_url = os.getenv("LLAMA_CLOUD_BASE_URL")
+
+    if name is None or project_name is None or api_key is None:
+        raise ValueError(
+            "Please set LLAMA_CLOUD_INDEX_NAME, LLAMA_CLOUD_PROJECT_NAME and LLAMA_CLOUD_API_KEY"
+            " to your environment variables or config them in .env file"
+        )
+
+    index = LlamaCloudIndex(
+        name=name,
+        project_name=project_name,
+        api_key=api_key,
+        base_url=base_url,
+    )
+
+    return index
+
+
+engine/generate.py
+from dotenv import load_dotenv
+
+load_dotenv()
+
+import os
+import logging
+from app.settings import init_settings
+from app.engine.loaders import get_documents
+from llama_index.indices.managed.llama_cloud import LlamaCloudIndex
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
+
+
+def generate_datasource():
+    init_settings()
+    logger.info("Generate index for the provided data")
+
+    name = os.getenv("LLAMA_CLOUD_INDEX_NAME")
+    project_name = os.getenv("LLAMA_CLOUD_PROJECT_NAME")
+    api_key = os.getenv("LLAMA_CLOUD_API_KEY")
+    base_url = os.getenv("LLAMA_CLOUD_BASE_URL")
+
+    if name is None or project_name is None or api_key is None:
+        raise ValueError(
+            "Please set LLAMA_CLOUD_INDEX_NAME, LLAMA_CLOUD_PROJECT_NAME and LLAMA_CLOUD_API_KEY"
+            " to your environment variables or config them in .env file"
+        )
+
+    documents = get_documents()
+
+    LlamaCloudIndex.from_documents(
+        documents=documents,
+        name=name,
+        project_name=project_name,
+        api_key=api_key,
+        base_url=base_url,
+    )
+
+    logger.info("Finished generating the index")
+
+
+if __name__ == "__main__":
+    generate_datasource()
+
+
+engine/__init__.py
+
+
+engine/loaders/db.py
+import os
+import logging
+from typing import List
+from pydantic import BaseModel, validator
+from llama_index.core.indices.vector_store import VectorStoreIndex
+
+logger = logging.getLogger(__name__)
+
+
+class DBLoaderConfig(BaseModel):
+    uri: str
+    queries: List[str]
+
+
+def get_db_documents(configs: list[DBLoaderConfig]):
+    from llama_index.readers.database import DatabaseReader
+
+    docs = []
+    for entry in configs:
+        loader = DatabaseReader(uri=entry.uri)
+        for query in entry.queries:
+            logger.info(f"Loading data from database with query: {query}")
+            documents = loader.load_data(query=query)
+            docs.extend(documents)
+
+    return documents
+
+
+engine/loaders/web.py
+import os
+import json
+from pydantic import BaseModel, Field
+
+
+class CrawlUrl(BaseModel):
+    base_url: str
+    prefix: str
+    max_depth: int = Field(default=1, ge=0)
+
+
+class WebLoaderConfig(BaseModel):
+    driver_arguments: list[str] = Field(default=None)
+    urls: list[CrawlUrl]
+
+
+def get_web_documents(config: WebLoaderConfig):
+    from llama_index.readers.web import WholeSiteReader
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+
+    options = Options()
+    driver_arguments = config.driver_arguments or []
+    for arg in driver_arguments:
+        options.add_argument(arg)
+
+    docs = []
+    for url in config.urls:
+        scraper = WholeSiteReader(
+            prefix=url.prefix,
+            max_depth=url.max_depth,
+            driver=webdriver.Chrome(options=options),
+        )
+        docs.extend(scraper.load_data(url.base_url))
+
+    return docs
+
+
+engine/loaders/__init__.py
+import os
+import yaml
+import importlib
+import logging
+from typing import Dict
+from app.engine.loaders.file import FileLoaderConfig, get_file_documents
+from app.engine.loaders.web import WebLoaderConfig, get_web_documents
+from app.engine.loaders.db import DBLoaderConfig, get_db_documents
+
+logger = logging.getLogger(__name__)
+
+
+def load_configs():
+    with open("config/loaders.yaml") as f:
+        configs = yaml.safe_load(f)
+    return configs
+
+
+def get_documents():
+    documents = []
+    config = load_configs()
+    for loader_type, loader_config in config.items():
+        logger.info(
+            f"Loading documents from loader: {loader_type}, config: {loader_config}"
+        )
+        match loader_type:
+            case "file":
+                document = get_file_documents(FileLoaderConfig(**loader_config))
+            case "web":
+                document = get_web_documents(WebLoaderConfig(**loader_config))
+            case "db":
+                document = get_db_documents(
+                    configs=[DBLoaderConfig(**cfg) for cfg in loader_config]
+                )
+            case _:
+                raise ValueError(f"Invalid loader type: {loader_type}")
+        documents.extend(document)
+
+    return documents
+
+
+engine/loaders/file.py
+import os
+import logging
+from typing import Dict
+from llama_parse import LlamaParse
+from pydantic import BaseModel, validator
+
+logger = logging.getLogger(__name__)
+
+
+class FileLoaderConfig(BaseModel):
+    data_dir: str = "data"
+    use_llama_parse: bool = False
+
+    @validator("data_dir")
+    def data_dir_must_exist(cls, v):
+        if not os.path.isdir(v):
+            raise ValueError(f"Directory '{v}' does not exist")
+        return v
+
+
+def llama_parse_parser():
+    if os.getenv("LLAMA_CLOUD_API_KEY") is None:
+        raise ValueError(
+            "LLAMA_CLOUD_API_KEY environment variable is not set. "
+            "Please set it in .env file or in your shell environment then run again!"
+        )
+    parser = LlamaParse(
+        result_type="markdown",
+        verbose=True,
+        language="en",
+        ignore_errors=False,
+    )
+    return parser
+
+
+def llama_parse_extractor() -> Dict[str, LlamaParse]:
+    from llama_parse.utils import SUPPORTED_FILE_TYPES
+
+    parser = llama_parse_parser()
+    return {file_type: parser for file_type in SUPPORTED_FILE_TYPES}
+
+
+def get_file_documents(config: FileLoaderConfig):
+    from llama_index.core.readers import SimpleDirectoryReader
+
+    try:
+        file_extractor = None
+        if config.use_llama_parse:
+            # LlamaParse is async first,
+            # so we need to use nest_asyncio to run it in sync mode
+            import nest_asyncio
+
+            nest_asyncio.apply()
+
+            file_extractor = llama_parse_extractor()
+        reader = SimpleDirectoryReader(
+            config.data_dir,
+            recursive=True,
+            filename_as_id=True,
+            raise_on_error=True,
+            file_extractor=file_extractor,
+        )
+        return reader.load_data()
+    except Exception as e:
+        import sys, traceback
+
+        # Catch the error if the data dir is empty
+        # and return as empty document list
+        _, _, exc_traceback = sys.exc_info()
+        function_name = traceback.extract_tb(exc_traceback)[-1].name
+        if function_name == "_add_files":
+            logger.warning(
+                f"Failed to load file documents, error message: {e} . Return as empty document list."
+            )
+            return []
+        else:
+            # Raise the error if it is not the case of empty data dir
+            raise e
+
+
